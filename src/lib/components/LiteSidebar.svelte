@@ -4,12 +4,14 @@
 	import { deviceRegistry } from '../stores/devices.svelte';
 	import { exportCanvas, copyToClipboard } from '../export';
 	import DropZone from './DropZone.svelte';
+	import ImageAnnotator from './ImageAnnotator.svelte';
 	import type { ExportScale, FrameStyle } from '../types';
 
 	let { canvasRef }: { canvasRef: HTMLDivElement | undefined } = $props();
 	let category = $state<'phone' | 'tablet'>('phone');
 	let busy = $state(false);
 	let copied = $state(false);
+	let annotating = $state(false);
 	let current = $derived(store.sceneObjects[0]);
 	let device = $derived(deviceRegistry.getDevice(current?.deviceId ?? ''));
 	let devices = $derived(deviceRegistry.devices.filter((d) => d.category === category));
@@ -51,6 +53,7 @@
 			<section class="space-y-2">
 				<h2 class="text-xs font-semibold">1. 上传截图</h2>
 				<DropZone screenshotUrl={current.screenshotUrl} onupload={(file) => store.setObjectScreenshot(current.id, file)} onremove={() => store.removeObjectScreenshot(current.id)} />
+				<button class="w-full rounded-md bg-zinc-800 px-3 py-2 text-xs disabled:opacity-40" disabled={!current.screenshotUrl} onclick={() => annotating = true}>批注图片</button>
 			</section>
 			<section class="space-y-2">
 				<h2 class="text-xs font-semibold">2. 选择设备</h2>
@@ -94,3 +97,9 @@
 		</div>
 	{/if}
 </aside>
+
+{#if annotating && current?.screenshotUrl}
+	{#key current.screenshotUrl}
+		<ImageAnnotator source={current.screenshotUrl} onsave={(file) => store.setObjectScreenshot(current.id, file)} onclose={() => annotating = false} />
+	{/key}
+{/if}
