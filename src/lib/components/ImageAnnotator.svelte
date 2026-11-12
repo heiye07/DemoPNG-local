@@ -16,7 +16,7 @@
 	let image: HTMLImageElement;
 	let tool = $state<Tool | 'pan'>('rectangle');
 	let color = $state('#ef4444');
-	let width = $state(6);
+	let width = $state(12);
 	let radius = $state(16);
 	let arrowStyle = $state<ArrowStyle>('open');
 	let maximized = $state(false);
@@ -36,7 +36,7 @@
 	];
 	let marks = $state<Mark[]>([]);
 	let undone = $state<Mark[]>([]);
-	let draft: Mark | null = null;
+	let draft = $state<Mark | null>(null);
 	let pointerId: number | null = null;
 	let ready = $state(false);
 	let saving = $state(false);
@@ -141,16 +141,21 @@
 				if (mark.arrowStyle === 'double') drawArrowHead(context, start, angle + Math.PI, head, false);
 			}
 		} else if (w > 0 && h > 0) {
+			// Align both clearing and drawing to whole source pixels to avoid translucent seams.
+			const x = Math.max(0, Math.floor(left));
+			const y = Math.max(0, Math.floor(top));
+			const pixelWidth = Math.min(canvas.width, Math.ceil(left + w)) - x;
+			const pixelHeight = Math.min(canvas.height, Math.ceil(top + h)) - y;
 			const sample = document.createElement('canvas');
 			const blockSize = mark.width * 4;
-			sample.width = Math.max(1, Math.ceil(w / blockSize));
-			sample.height = Math.max(1, Math.ceil(h / blockSize));
+			sample.width = Math.max(1, Math.ceil(pixelWidth / blockSize));
+			sample.height = Math.max(1, Math.ceil(pixelHeight / blockSize));
 			const small = sample.getContext('2d')!;
-			small.drawImage(image, left, top, w, h, 0, 0, sample.width, sample.height);
+			small.drawImage(image, x, y, pixelWidth, pixelHeight, 0, 0, sample.width, sample.height);
 			context.save();
 			context.imageSmoothingEnabled = false;
-			context.clearRect(left, top, w, h);
-			context.drawImage(sample, 0, 0, sample.width, sample.height, left, top, w, h);
+			context.clearRect(x, y, pixelWidth, pixelHeight);
+			context.drawImage(sample, 0, 0, sample.width, sample.height, x, y, pixelWidth, pixelHeight);
 			context.restore();
 		}
 	}
@@ -161,24 +166,7 @@
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		context.drawImage(image, 0, 0);
 		for (const mark of marks) draw(context, mark);
-		if (draft) {
-			draw(context, draft);
-			if (draft.tool === 'mosaic') {
-				const left = Math.min(draft.start.x, draft.end.x);
-				const top = Math.min(draft.start.y, draft.end.y);
-				const w = Math.abs(draft.end.x - draft.start.x);
-				const h = Math.abs(draft.end.y - draft.start.y);
-				context.save();
-				context.lineWidth = 3 / scale;
-				context.strokeStyle = '#ffffff';
-				context.strokeRect(left, top, w, h);
-				context.lineWidth = 2 / scale;
-				context.strokeStyle = '#ec4899';
-				context.setLineDash([6 / scale, 4 / scale]);
-				context.strokeRect(left, top, w, h);
-				context.restore();
-			}
-		}
+		if (draft) draw(context, draft);
 	}
 
 	function point(event: PointerEvent): Point {
@@ -317,7 +305,12 @@
 		{#if !ready && !error}<p class="px-5 py-2 text-sm">正在加载图片…</p>{/if}
 		<div bind:this={viewport} aria-label="图片预览区域" class="min-h-0 flex-1 overflow-auto bg-zinc-950 overscroll-contain">
 			<div class="grid place-items-center" style="width: max(100%, {imageSize.width * scale + 32}px); height: max(100%, {imageSize.height * scale + 32}px);">
+				<div class="relative shrink-0" style="width: {imageSize.width * scale}px; height: {imageSize.height * scale}px;">
 				<canvas bind:this={canvas} aria-label="图片批注画布" class="block touch-none {ready ? (tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair') : 'invisible'}" style="width: {imageSize.width * scale}px; height: {imageSize.height * scale}px;" onpointerdown={start} onpointermove={move} onpointerup={finish} onpointercancel={cancelStroke} onlostpointercapture={cancelStroke}></canvas>
+					{#if draft?.tool === 'mosaic'}
+						<div aria-label="马赛克选区" class="pointer-events-none absolute border-2 border-dashed border-pink-500 outline outline-1 outline-white" style="left: {Math.min(draft.start.x, draft.end.x) * scale}px; top: {Math.min(draft.start.y, draft.end.y) * scale}px; width: {Math.abs(draft.end.x - draft.start.x) * scale}px; height: {Math.abs(draft.end.y - draft.start.y) * scale}px;"></div>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</div>
